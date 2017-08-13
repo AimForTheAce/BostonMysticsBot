@@ -1,0 +1,38 @@
+{
+    "greeting-servers" : 
+    [
+	[
+	    "Boston Mystics",
+	    {
+    		"main-channel": "post-avatar-screenshot-to-join",
+		"info-channel": "rules-and-announcements",
+		"greetings-main": "Welcome {0.mention} to the {1.name} Discord. Please post a screenshot of your Pokemon Go trainer screen and someone will be around shortly to add you.",
+	    "greetings-info": "Meanwhile, please take a look at the {0.mention}!"
+	    }
+	],
+	[
+	    "Raid HQ",
+	    {
+    		"main-channel": "entrance",
+		"info-channel": "rules-and-announcements",
+		"greetings-main": "Welcome {0.mention} to the {1.name} Discord.",
+		"greetings-info": "Meanwhile, please take a look at the {0.mention}!"
+	    }
+	]
+    ],
+			   
+
+    "count" : "Boston Mystics",
+
+    "channel-map":  [ { "source":      { "server": "BostonPogoMap",  "channel" : "iv100" },
+			"destination": { "server": "Boston Mystics", "channel" : "100-percent-pokemon-hunting" },
+		        "format" : "pokemon" },
+		      { "source":      { "server": "BostonPogoMap",  "channel" : "unown" },
+			"destination": { "server": "Boston Mystics", "channel" : "unown" },
+		        "format" : "pokemon" }
+		    ],
+
+    "bot-reply": "I'm a bot, written by AimForTheAce.\n\nI can count. Please tell me to count.",
+
+    "ur-welcome": "You are welcome. FYI, I am a bot written by AimForTheAce."
+}

@@ -1,18 +1,18 @@
 #/usr/bin/python3
 
-import discord
-import json
-import sys
-import time
+import discord, json, sys, time, re
 
 VERSION = "0.1"
 
 # Count members on the server which has any role
 def count_members(server):
-    n_members = 0
-    n_whites = 0
+    role_counts = { None: 0, "verified": 0, "valor": 0, "instinct": 0, "CallAbuser": 0 }
+
     for member in server.members:
         if (len(member.roles) > 1):
+            for role in member.roles:
+                if role.name in [ "valor", "instinct", "CallAbuser" ]:
+                    role_counts[role.name] = role_counts[role.name] + 1
             n_members = n_members + 1
             pass
         else:
@@ -32,8 +32,12 @@ async def assign_member_role(connection, server, members, role_name):
     pass
 
 
+
 class DoubleFault(discord.Client):
     
+    set_raid_channels_re = re.compile("^set raid channels (.+)$")
+
+
     def __init__(self):
         super().__init__()
 
@@ -48,6 +52,7 @@ class DoubleFault(discord.Client):
         self.xfer_map = {}
         self.current_log = None
         self.raid_data_file = None
+        self.raid_channels = self.config["raid-channels"]
         pass
 
 
@@ -124,7 +129,7 @@ class DoubleFault(discord.Client):
                 pass
             pass
     
-        if message.server.name == "BostonPogoMap" and message.channel.name in [ "raid", "legendary" ]:
+        if message.server.name == "BostonPogoMap" and message.channel.name in self.raid_channels:
             await self.save_raid_data(message.content)
             return
 
@@ -196,8 +201,19 @@ class DoubleFault(discord.Client):
             self.greeters = [ greeter for greeter in self.greeters if greeter != message.author ]
             reply = "No greetings\n"
             pass
+
         elif message.content.lower() == "version":
             reply = VERSION
+            pass
+
+        elif message.content.lower() == "raid":
+            reply = "Raid channels: %s" % ",".join(self.raid_channels)
+            pass
+
+        matched = self.set_raid_channels_re.match(message.content)
+        if matched:
+            self.raid_channels = [ ch.strip() for ch in matched.group(1).split(",") ]
+            reply = "New raid channels: %s" % ",".join(self.raid_channels)
             pass
 
         if reply is None:

@@ -3,10 +3,9 @@
 import discord
 import json
 import sys
+import time
 
 VERSION = "0.1"
-
-connection = discord.Client()
 
 # Count members on the server which has any role
 def count_members(server):
@@ -33,9 +32,11 @@ async def assign_member_role(connection, server, members, role_name):
     pass
 
 
-class DoubleFault:
+class DoubleFault(discord.Client):
     
     def __init__(self):
+        super().__init__()
+
         self.config = json.load(open( "/var/lib/doublefault/config.json"))
         self.account = json.load(open("/var/lib/doublefault/account.json"))
         self.new_members = []
@@ -45,6 +46,8 @@ class DoubleFault:
             pass
         self.my_servers = {} # The severs that the bot belongs
         self.xfer_map = {}
+        self.current_log = None
+        self.raid_data_file = None
         pass
 
 
@@ -77,20 +80,23 @@ class DoubleFault:
             message = message + "\n" + greetings_info.format(info_channel)
             pass
 
-        await connection.send_message(server, message)
+        await self.send_message(server, message)
         pass
 
         if len(self.greeters) > 0:
             line_to_drop = '{0.mention} is here'.format(member)
             for greeter in self.greeters:
-                await connection.send_message(greeter, line_to_drop)
+                await self.send_message(greeter, line_to_drop)
                 pass
             pass
         pass
-    pass
 
 
     async def on_message(self, message):
+        # If I'm dispatching the message that I sent, ignore
+        if message.author == self.user:
+            return
+
         # PM
         if message.server is None:
             await self.handle_pm(message)
@@ -113,19 +119,49 @@ class DoubleFault:
                     else:
                         output = " ".join( [lines[0], lines[2], lines[7], lines[9]])
                         pass
-                    await connection.send_message(dst_channel, output)
+                    await self.send_message(dst_channel, output)
                     pass
                 pass
             pass
     
-        i_am = connection.user
+        if message.server.name == "BostonPogoMap" and message.channel.name in [ "raid", "legendary" ]:
+            await self.save_raid_data(message.content)
+            return
+
+        i_am = self.user
         if i_am in message.mentions:
             if "thank" in message.content.lower():
-                await connection.send_message(message.channel, str(self.config.get("ur-welcome")))
+                await self.send_message(message.channel, str(self.config.get("ur-welcome")))
                 pass
-            return
+            pass
         return
+ 
+    async def save_raid_data(self, content):
+        current = "raid." + time.strftime("%Y-%m-%d.%H", time.localtime()) + ".txt"
+
+        if current != self.current_log:
+            if self.raid_data_file is not None:
+                self.raid_data_file.close()
+                self.raid_data_file = None
+                pass
+            pass
         
+        if self.raid_data_file is None:
+            self.current_log = current
+            try:
+                self.raid_data_file = open("/var/spool/doublefault/" + current, "a+")
+            except:
+                pass
+            pass
+
+        if self.raid_data_file is not None:
+            self.raid_data_file.write(content)
+            self.raid_data_file.write("\n\n")
+            self.raid_data_file.flush()
+            pass
+
+        pass
+
 
     # Handling PM
     async def handle_pm(self, message):
@@ -168,7 +204,7 @@ class DoubleFault:
             reply = str(self.config.get("bot-reply"))
             pass
         
-        await connection.send_message(message.channel, reply)
+        await self.send_message(message.channel, reply)
         return
     
 
@@ -177,7 +213,7 @@ class DoubleFault:
 
         # self.servers - all of servers that the bot is in.
         # Convenient cache for my servers
-        for server in connection.servers:
+        for server in self.servers:
             # Using None for server - a bit of hack
             submap = {None: server}
             for channel in server.channels:
@@ -232,25 +268,6 @@ class DoubleFault:
         return
     pass
 
+
 bot = DoubleFault()
-
-@connection.event
-async def on_ready():
-    await bot.on_ready()
-    pass
-
-@connection.event
-async def on_message(message):
-    #
-    if message.author == connection.user:
-        return
-    print("message %s" % message.content)
-    await bot.on_message(message)
-    pass
-
-@connection.event
-async def on_member_join(member):
-    await bot.on_member_join(member)
-    pass
-
-connection.run(bot.account["username"], bot.account["password"])
+bot.run(bot.account["username"], bot.account["password"])

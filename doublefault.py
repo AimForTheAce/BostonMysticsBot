@@ -6,20 +6,32 @@ VERSION = "0.1"
 
 # Count members on the server which has any role
 def count_members(server):
-    role_counts = { None: 0, "verified": 0, "valor": 0, "instinct": 0, "CallAbuser": 0 }
+    role_counts = {  }
 
     for member in server.members:
+        the_role = None
         if (len(member.roles) > 1):
             for role in member.roles:
-                if role.name in [ "valor", "instinct", "CallAbuser" ]:
-                    role_counts[role.name] = role_counts[role.name] + 1
-            n_members = n_members + 1
+                if role.name in [ "valor", "instinct", "CallAbuser", "Carbon" ]:
+                    the_role = role.name
+                    break
+                pass
+            if the_role == None:
+                the_role = "Mystic"
+                pass
             pass
         else:
-            n_whites = n_whites + 1
+            the_role = "none"
+            pass
+
+        if role_counts.get(the_role) is not None:
+            role_counts[the_role] = role_counts[the_role] + 1
+            pass
+        else:
+            role_counts[the_role] = 1
             pass
         pass
-    return (n_members, n_whites)
+    return role_counts
 
 
 async def assign_member_role(connection, server, members, role_name):
@@ -178,7 +190,7 @@ class DoubleFault(discord.Client):
             counted_server_spec = self.my_servers.get(self.config.get("count"))
             counted_server = counted_server_spec[None] if counted_server_spec is not None else None
             if counted_server:
-                reply = "members %d whites %d" % count_members(counted_server)
+                reply = " ".join( [ "%s: %d" % item for item in sorted( count_members(counted_server).items(), key=lambda item: item[1] ) ] )
                 pass
             else:
                 reply = "no counting server? %s" % "\n".join(servers.keys())

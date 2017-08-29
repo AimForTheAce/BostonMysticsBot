@@ -3,7 +3,7 @@ destdir := /var/lib/doublefault
 sources := account.json config.json
 username := $(shell id -u -n)
 
-targets := $(addprefix $(destdir)/,$(sources))
+targets := $(addprefix $(destdir)/,$(sources)) /var/spool/doublefault
 
 default: $(targets)
 
@@ -16,4 +16,9 @@ $(destdir)/config.json: config.json
 
 $(destdir)/account.json:
 	echo "{ \"username\": \"user@exmaple.com",\"password\": \"changeme\"}" > $@
+
+
+/var/spool/doublefault:
+	sudo mkdir -p $@
+	sudo chown $(username) $@
 

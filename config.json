@@ -34,7 +34,7 @@
 
     "raid-channels": ["raid-level-4", "raid-legendary"],
     
-    "bot-reply": "I'm a bot, written by AimForTheAce.\n\nI can count. Please tell me to count.",
+    "bot-reply": "I'm a bot, written by AimForTheAce.\n",
 
     "ur-welcome": "You are welcome. FYI, I am a bot written by AimForTheAce."
 }

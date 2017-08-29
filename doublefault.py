@@ -173,11 +173,11 @@ class DoubleFault(discord.Client):
                 pass
             pass
     
-        if message.server.name == "BostonPogoMap" and message.channel.name in self.raid_channels:
+        if message.server.name == self.config["scanner"]  and message.channel.name in self.raid_channels:
             await self.save_raid_data(message.content)
             return
 
-        if message.server.name == "BostonPogoMap":
+        if message.server.name == self.config["scanner"]:
             pokemon = message.channel.name.lower()
             await self.relay_spawn(pokemon, message.content)
             pass

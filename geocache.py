@@ -101,11 +101,11 @@ def get_cached_geolocator():
 
 if __name__ == "__main__":
     geo = cached_geolocator()
-    v = geo.lookup("37 Wellington St, Arlington, MA")
+    v = geo.lookup("Arlington, MA")
 
-    print (str(geo.lookup("37 Wellington St, Arlington, MA")))
+    print (str(geo.lookup("Arlington, MA")))
 
-    geo.lookup_reverse(Point('42.4119514,-71.1541692'))
-    print (geo.lookup_reverse(Point('42.4119514,-71.1541692')))
+    geo.lookup_reverse(Point('42.41,-71.15'))
+    print (geo.lookup_reverse(Point('42.41,-71.15')))
     
     

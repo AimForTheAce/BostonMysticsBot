@@ -7,13 +7,15 @@ from subscriber import Subscriber
 from settingdb import SettingDB
 from selectiondb import SelectionDB
 from geopy.point import Point
+import geocache
 
+import geopy.exc
 
 VERSION = "0.1"
 
 #
 
-google_map_re = re.compile(r"https://maps.google.com/maps\?q=([+-]{0,1}\d+\.\d+),([+-]{0,1}\d+\.\d+)")
+google_map_re = re.compile(r"maps.google.com/maps\?q=([+-]{0,1}\d+\.\d+),([+-]{0,1}\d+\.\d+)")
 
 def parse_spawn_message(spawn):
     coords = google_map_re.search(spawn, re.MULTILINE)
@@ -62,6 +64,23 @@ async def assign_member_role(connection, server, members, role_name):
     pass
 
 
+def to_distance(inp):
+    int_distance = None
+    try:
+        int_distance = int(inp)
+    except Exception as exc:
+        pass
+    if int_distance is not None:
+        if int_distance > 15000:
+            int_distance = 15000
+        elif int_distance < 10:
+            int_distance = 10
+            pass
+        return int_distance
+    return None
+    
+
+
 class DoubleFault(discord.Client):
     
     set_raid_channels_re = re.compile("^set raid channels (.+)$")
@@ -90,6 +109,8 @@ class DoubleFault(discord.Client):
         self.settingdb.create_table()
         self.selectiondb = SelectionDB(self.account["db-username"], self.account["db-password"])
         self.selectiondb.create_table()
+
+        self.geoloc = geocache.get_cached_geolocator()
         pass
 
 
@@ -158,17 +179,31 @@ class DoubleFault(discord.Client):
             if from_server is not None:
                 destination_spec = from_server.get(message.channel.name)
                 if destination_spec is not None:
-                    dst_server, dst_channel, format_spec, everyone = destination_spec
+                    dst_server, dst_channel, format_spec, everyone, pokemon_spec = destination_spec
                     lines = message.content.split("\n")
                     if format_spec == "raid":
                         output = " ".join( [lines[0], lines[2], lines[4], lines[5], lines[8], lines[10]])
+                    elif format_spec == "tear-5":
+                        output = None
+                        if lines[0].count(pokemon_spec) > 0:
+                            coord = parse_spawn_message(lines[11])
+                            addr = ""
+                            if coord is not None:
+                                revaddr = self.geoloc.lookup_reverse(coord)
+                                addr = revaddr + "\n"
+                                pass
+                            output = addr + " ".join( [lines[0], lines[2], lines[4], lines[5], lines[8], lines[11]])
+                            pass
+                        pass
                     else:
                         output = " ".join( [lines[0], lines[2], lines[7], lines[9]])
                         pass
                     if everyone:
                         output = "@everyone " + output
                         pass
-                    await self.send_message(dst_channel, output)
+                    if output is not None:
+                        await self.send_message(dst_channel, output)
+                        pass
                     pass
                 pass
             pass
@@ -211,16 +246,18 @@ class DoubleFault(discord.Client):
                                                   id=pm_channel)
                         pass
                     lines = spawn_data.split("\n")
-                    try:
-                        reply = lines[0] + " " + lines[2] + " " + lines[3] + " " + lines[5] + "\n" + lines[9] + " **Distance**: %d meters" % meter
-                    except:
-                        reply = spawn_data
+                    reply = lines[0]
+                    for line in lines:
+                        if line.count("Until") > 0: reply = reply + " " + line
+                        if line.count("Address") > 0: reply = reply + " " + line
+                        if line.count("Google") > 0: reply = reply + "\n" + line
                         pass
+                    reply = reply + " **Distance**: %d meters" % meter
                     await self.send_message(where, reply)
                     pass
                 pass
             else:
-                print( "Something fishy.\n" + spwan_data)
+                print( "Something fishy.\n" + spawn_data)
                 pass
             pass
         pass
@@ -342,6 +379,8 @@ class DoubleFault(discord.Client):
             if user.surrogateid is None:
                 self.settingdb.put_user_data(user)
                 self.selectiondb.update_range(user.surrogateid, user.pokemons, user.coordinates, user.distance)
+                # Special rule
+                self.selectiondb.update_range(user.surrogateid, "unown", user.coordinates, 10000)
                 pass
             else:
                 self.selectiondb.update_coord(user.surrogateid, user.coordinates)
@@ -362,29 +401,56 @@ class DoubleFault(discord.Client):
             await self.send_message(message.channel, reply)
             pass
         
-        elif words[0] == "range":
+        elif words[0] == "range" or self.selectiondb.pokemons.get(words[0]):
             user = Subscriber(discordid, pm_channel, self.settingdb, self.selectiondb)
 
-            if len(words) == 3:
-                pokemons = words[1]
-                distance = words[2]
+            pokemons = None
+            distance = None
+            try:
+                if self.selectiondb.pokemons.get(words[0]):
+                    pokemons = words[0]
+                    distance = words[1]
+                elif len(words) == 3:
+                    pokemons = words[1]
+                    distance = words[2]
+                    pass
+                pass
+            except Exception:
+                pass
 
-                reply = user.set_range(pokemons, distance)
-                if len(reply) > 0:
-                    await self.send_message(message.channel, "bad pokemon names\n" + reply)
+            if pokemons is not None and distance is not None:
+                int_distance = to_distance(distance)
+                if int_distance is not None:
+                    if pokemons == "all":
+                        self.selectiondb.update_distance(user.surrogateid, int_distance)
+                        await self.send_message(message.channel, "All of selection's distance are set to %d" % int_distance)
+                    else:
+                        reply = user.set_range(pokemons, int_distance)
+                        if len(reply) > 0:
+                            await self.send_message(message.channel, "bad pokemon names\n" + reply)
+                            pass
+                        pass
+                    pass
+                else:
+                    await self.send_message(message.channel, "Hmm. distance is in meter and just digits, nothing else. You gave me '%s' and I don't make it to any number." % distance)
                     pass
                 pass
             else:
-                await self.send_message(message.channel, user.report_for_user())
+                await self.send_message(message.channel, "I didn't get that. Here is the current setting.\n" + user.report_for_user())
                 pass
             pass
 
-        elif words[0] == "all-range":
+        elif words[0] == "all":
             user = Subscriber(discordid, pm_channel, self.settingdb, self.selectiondb)
 
             if len(words) == 2:
-                distance = words[1]
-                self.selectiondb.update_distance(user.surrogateid, distance)
+                int_distance = to_distance(words[1])
+                if int_distance is not None:
+                    self.selectiondb.update_distance(user.surrogateid, int_distance)
+                    await self.send_message(message.channel, "All of selection's distance are set to %d" % int_distance)
+                else:
+                    await self.send_message(message.channel, "Sorry buddy. '%s' is not digits. Try just numbers." % words[1])
+                    pass
                 pass
             else:
                 await self.send_message(message.channel, "no sir.")
@@ -425,30 +491,93 @@ class DoubleFault(discord.Client):
 
 
         elif words[0] == "help":
-            usage = '''pin <address>
+            usage = '''**See also '{code} example' especially if this is your first time.**
+
+{code} pin <address>
   sets up the location you are interested in.
 
-info
+{code} info
   prints out what DoubleFault knows
 
-start/stop
-  starts/stops the spwan relay.
+{code} start
+{code} stop
+  starts/stops the spawn relay.
 
-range [pokemons,...] distance
-  The spawn of pokemons within the distance is relayed to you.
+range [pokemons,...] <distance(meter)>
+  set the pokemon you care and it's range you wnt to see. This command can add more pokemons you want to see.
 
-all-range distance
+{code} all <distance(meter)>
   All of spawn max distance is set to it.
 
-delete [pokemons,]
+{code} delete [pokemons,]
   delete the spawn setting of pokemons
 
-bye
-  forget all about you.'''
+{code} bye
+  forget all about you.
+'''.format(code=self.account["bot-prefix"])
 
             await self.send_message(message.channel, usage)
             pass
 
+        elif words[0] == "example":
+            example = '''
+Please remember that the code word **'{code}'**. The spawn relay command only works when you use the code word. Every command needs to start with '{code}'.
+
+**How to start**
+
+{code} pin arlington town hall, ma
+
+This kicks the spawn realy into gear. When the address look up is done, DoubleFault replies with the google map link with the coordinates. You can see where you pinned yourself.
+
+**See what's I'm getting**
+
+{code} info
+
+It tells you the current location, and list of pokemons and range from your location. The number is in meters. (Yes, metric.) 1600 meters is 1 mile, FYI. 
+
+**Add more pokemon I care**
+
+{code} range golem 2000
+
+So, now you told DoubleFault you are insterested in golem within 2000 meters from you. You can update the distance with same command.
+
+
+**Delete some pokemon**
+
+So, when you don't care unown, you can delete the relay selection by
+
+{code} delete unown
+
+**Changing my location**
+
+When you want to change your location, use the pin command again. It updates all of your relay request location.
+
+
+**Setting the range of all spawn relay requests at once**
+
+{code} all 1500
+
+Now, you changed all of your relay requests' ranges to 1500 meters. Use "{code} info" to make sure it's all updated.
+
+**Starting and stopping the spawn relay service**
+
+{code} start
+{code} stop
+
+The pokemon selections and settings don't change but you can start/stop the relay message to your PM.
+
+**Leaving the spawn relay service**
+
+{code} bye
+
+It purges all your settings and forget about you.
+
+**About distance**
+
+Unit of distance is metric - meter. The minimum range is 100 and maximum range is 15000 - which is a little shy of 10 miles. I could give you more range but from what I saw, outside of 10 miles, you just cannot get to it very often. So, I capped it to 15,000 meters.
+'''
+            await self.send_message(message.channel, example.format(code=self.account['bot-prefix']))
+            pass
 
         elif words[0] == "test":
             data = '''[Cambridgeport] **Rhydon** (22%)
@@ -620,8 +749,9 @@ bye
                 pass
 
             everyone = map_spec.get("everyone")
+            pokemon_spec = map_spec.get("pokemon")
 
-            self.xfer_map[src_server_name][src_channel_name] = (dst_server, dst_channel, format_spec, everyone)
+            self.xfer_map[src_server_name][src_channel_name] = (dst_server, dst_channel, format_spec, everyone, pokemon_spec)
             pass
         return
     pass

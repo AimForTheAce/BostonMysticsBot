@@ -222,19 +222,26 @@ create table if not exists {table}
         # print(sql)
         dbh.execute(sql)
 
+        first_line = ""
         outputs = []
         user_loc = Point()
+        line_no = 0
         while True:
             row = dbh.fetchone()
             if row == None:
                 break
             pokemon_name, distance, coord = row
             lat_lng = [ float(value) for value in coord.replace("POINT(", "").replace(")", "").split(" ") ]
-            outputs.append("%s in %dm from https://maps.google.com/maps?q=%s,%s" % (pokemon_name, distance, lat_lng[0], lat_lng[1]))
+            if line_no == 0:
+                first_line = "From https://maps.google.com/maps?q=%s,%s\n" % (lat_lng[0], lat_lng[1])
+                pass
+            line_no = line_no + 1
+            outputs.append("%s in %dm" % (pokemon_name, distance))
+
             pass
         dbh.close()
         self.db.commit()
-        return "\n".join(outputs)
+        return first_line + ", ".join(outputs)
 
     pass
 

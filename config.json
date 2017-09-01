@@ -23,13 +23,22 @@
 			   
 
     "count" : "Boston Mystics",
+    "scanner" : "BostonPogoMap",
 
     "channel-map":  [ { "source":      { "server": "BostonPogoMap",  "channel" : "iv100" },
 			"destination": { "server": "Boston Mystics", "channel" : "100-percent-pokemon-hunting" },
 		        "format" : "pokemon" },
 		      { "source":      { "server": "BostonPogoMap",  "channel" : "unown" },
 			"destination": { "server": "Boston Mystics", "channel" : "unown" },
-		        "format" : "pokemon" }
+		        "format" : "pokemon" },
+		      { "source":      { "server": "BostonPogoMap",  "channel" : "raid-legendary" },
+			"destination": { "server": "Boston Mystics", "channel" : "lugia-raid" },
+		        "format" : "tear-5",
+			"pokemon": "Lugia" },
+		      { "source":      { "server": "BostonPogoMap",  "channel" : "raid-legendary" },
+			"destination": { "server": "Boston Mystics", "channel" : "raikou-raid" },
+		        "format" : "tear-5",
+		        "pokemon": "Raikou" }
 		    ],
 
     "raid-channels": ["raid-level-4", "raid-legendary"],

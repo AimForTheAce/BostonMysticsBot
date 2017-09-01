@@ -42,8 +42,8 @@ class PokemonDB:
 
     def put_pokemon(self, dexno, name):
         dbh = self.db.cursor()
-        query = "replace into %s (dexno, name) " % self.table_name
-        values = "values('{dexno}', '{name}')".format(dexno=dexno, name=name.lower())
+        query = "insert into %s (dexno, name) " % self.table_name
+        values = "values({dexno}, '{name}') on duplicate key update dexno={dexno}, name='{name}'".format(dexno=dexno, name=name.lower())
         sql = query + values
         dbh.execute(sql)
         self.db.commit()
@@ -73,8 +73,8 @@ class PokemonDB:
 def main():
     account = json.load(open("/var/lib/doublefault/account.json"))
     db = PokemonDB(account["db-username"], account["db-password"])
-    db.drop_table()
-    db.create_table()
+    # db.drop_table()
+    # db.create_table()
 
     filename = "pokemon.txt"
     dexno = 0
@@ -93,6 +93,10 @@ def main():
             db.put_pokemon(dexno, name)
             pass
         pass
+
+    db.put_pokemon(-1, "iv100")
+    db.put_pokemon(-2, "iv90")
+
     pass
 
 

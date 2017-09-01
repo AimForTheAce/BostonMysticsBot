@@ -8,19 +8,21 @@ from geopy.geocoders import GoogleV3
 from settingdb import SettingDB
 from selectiondb import SelectionDB
 
+import geocache
 
 class Subscriber:
-    geoloc = GoogleV3()
-    # geoloc = Nominatim()
-
+    geoloc = geocache.get_cached_geolocator()
+    
     async def set_address(self, address):
         self.address = address
         self.resolve_address()
         pass
 
     def resolve_address(self):
-        loc = self.geoloc.geocode(self.address)
-        self.coordinates = Point(loc.latitude, loc.longitude)
+        loc = self.geoloc.lookup(self.address)
+        if loc is not None:
+            self.coordinates = Point(loc.latitude, loc.longitude)
+            pass
         pass
 
     def __init__(self, discordid, pm_channel,

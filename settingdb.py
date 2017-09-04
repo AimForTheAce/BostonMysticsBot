@@ -33,7 +33,7 @@ create table if not exists {table}
      on_off char(1) not null default 'y',
      address varchar(255),
      coordinates char(64),
-     distance int not null default 3000
+     distance int not null default 1500
    ) engine=MyISAM'''.format(table=self.table_name)
         dbh.execute(sql)
         dbh.close()

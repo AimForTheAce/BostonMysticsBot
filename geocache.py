@@ -35,7 +35,6 @@ class cached_geolocator:
         addrs = dbh.fetchone()
         dbh.close()
         if addrs is not None:
-            print ("rev addr0 " + addrs[0])
             return addrs[0].split("\n")[0]
 
         revaddr = None
@@ -57,7 +56,7 @@ class cached_geolocator:
 
         addrs = "\n".join(value)
         
-        dbh = self.cachedb.execute("insert into cache_reverse values('{a.latitude},{a.longitude}', '{addrs}')".format(a=coord, addrs=addrs))
+        dbh = self.cachedb.execute("insert into cache_reverse (lat_lon, addrs) values('{a.latitude},{a.longitude}', '{addrs}')".format(a=coord, addrs=addrs))
         dbh.fetchall()
         self.cachedb.commit()
         dbh.close()
@@ -84,7 +83,7 @@ class cached_geolocator:
         if loc is None:
             return None
 
-        dbh = self.cachedb.execute("insert into cache_lookup values ( '{a}', '{ll.latitude},{ll.longitude}' )".format(a=addr, ll=loc))
+        dbh = self.cachedb.execute("insert into cache_lookup (addr, lat_lon) values( '{a}', '{ll.latitude},{ll.longitude}' )".format(a=addr, ll=loc))
         dbh.fetchall()
         self.cachedb.commit()
         dbh.close()

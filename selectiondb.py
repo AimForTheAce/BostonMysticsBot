@@ -40,13 +40,14 @@ class SelectionDB:
         sql = '''
 create table if not exists {table}
    ( settingid int not null,
-     dexno int not null,
+     dexno smallint not null,
+     spawntype smallint not null,
      coord point not null,
      distance int not null,
      spatial index(coord),
      foreign key ( dexno ) references pokemon (dexno) on delete cascade,
      foreign key ( settingid ) references {master} (settingid) on delete cascade,
-     primary key(settingid, dexno)
+     primary key(settingid, dexno, spawntype)
   ) engine=myisam;'''.format(table=self.table_name,
                              master=self.master_table)
         dbh.execute(sql)
@@ -55,18 +56,18 @@ create table if not exists {table}
         pass
 
 
-    def update_range(self, surrogateid, pokemons, coord, distance):
+    def update_range(self, surrogateid, spawntype, pokemons, coord, distance):
         dbh = self.db.cursor()
         reply = ""
 
         for pokemon in pokemons.split(","):
             dexno = self.pokemons.get(pokemon.lower().strip())
             if dexno is not None:
-                inssql = "insert into %s (settingid, dexno, coord, distance) values " % self.table_name
-                fmt = "({surrogateid}, {dexno}, GeomFromText('Point({coord.latitude} {coord.longitude})'), {distance})"
-                values = fmt.format(coord=coord, distance=distance, surrogateid=surrogateid, dexno=dexno)
-                fmt = " on duplicate key update coord = GeomFromText('Point({coord.latitude} {coord.longitude})'), distance={distance}, dexno={dexno}, settingid={surrogateid}"
-                sql = inssql + values + fmt.format(coord=coord, distance=distance, surrogateid=surrogateid, dexno=dexno)
+                inssql = "insert into %s (settingid, dexno, spawntype, coord, distance) values " % self.table_name
+                fmt = "({surrogateid}, {dexno}, {spawntype}, GeomFromText('Point({coord.latitude} {coord.longitude})'), {distance})"
+                values = fmt.format(coord=coord, distance=distance, surrogateid=surrogateid, dexno=dexno, spawntype=spawntype)
+                fmt = " on duplicate key update coord = GeomFromText('Point({coord.latitude} {coord.longitude})'), distance={distance}, dexno={dexno}, settingid={surrogateid}, spawntype={spawntype}"
+                sql = inssql + values + fmt.format(coord=coord, distance=distance, surrogateid=surrogateid, dexno=dexno, spawntype=spawntype)
                 dbh.execute(sql)
                 pass
             else:
@@ -87,9 +88,10 @@ create table if not exists {table}
         return
 
 
-    def update_distance(self, surrogateid, distance):
+    def update_distance(self, surrogateid, spawntype, distance):
         dbh = self.db.cursor()
-        sql = "update {table} set distance = {d} where settingid = {surrogateid}".format(table=self.table_name, surrogateid=surrogateid, d=distance)
+        fmt = "update {table} set distance = {d} where settingid = {surrogateid} and spawntype={spawntype}"
+        sql = fmt.format(table=self.table_name, surrogateid=surrogateid, d=distance, spawntype=spawntype)
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
@@ -105,14 +107,14 @@ create table if not exists {table}
         return
 
 
-    def delete_pokemons(self, surrogateid, pokemons):
+    def delete_spawns(self, surrogateid, spawntype, pokemons):
         dbh = self.db.cursor()
         reply = ""
 
         for pokemon in pokemons.split(","):
             dexno = self.pokemons.get(pokemon.lower().strip())
             if dexno is not None:
-                delsql = "delete from %s where settingid=%d and dexno=%d" % (self.table_name, surrogateid, dexno)
+                delsql = "delete from %s where settingid=%d and dexno=%d and spawntype=%d" % (self.table_name, surrogateid, dexno, spawntype)
                 dbh.execute(delsql)
                 pass
             else:
@@ -128,8 +130,10 @@ create table if not exists {table}
         dbh = self.db.cursor()
         sql = "delete from {me} where settingid = {u.surrogateid}".format(me=self.table_name, u=user)
         dbh.execute(sql)
-        inssql = "insert into %s (settingid, dexno, coord, distance) values " % self.table_name
-        values = ",".join([ "({u.surrogateid}, {dexno}, GeomFromText('Point({u.coordinates.latitude} {u.coordinates.longitude})'), {u.distance})".format(u=user, dexno=self.pokemons[pokemon.lower().strip()]) for pokemon in user.pokemons.split(",")])
+        inssql = "insert into %s (settingid, dexno, spawntype, coord, distance) values " % self.table_name
+
+        values = ["({u.surrogateid}, {dexno}, 0, GeomFromText('Point({u.coordinates.latitude} {u.coordinates.longitude})'), {u.distance})".format(u=user, dexno=self.pokemons[pokemon.lower().strip()]) for pokemon in user.spawns.split(",")] + ["({u.surrogateid}, {dexno}, 1, GeomFromText('Point({u.coordinates.latitude} {u.coordinates.longitude})'), {u.distance})".format(u=user, dexno=self.pokemons[pokemon.lower().strip()]) for pokemon in user.raids.split(",")] 
+        values = ",".join(values)
         sql = inssql + values
         dbh.execute(sql)
         self.db.commit()
@@ -137,23 +141,26 @@ create table if not exists {table}
         pass
 
 
-    def set_pokemno_distance(self, user, pokemon, distance):
+    def set_pokemno_distance(self, user, pokemon, distance, spawntype):
         dbh = self.db.cursor()
-        sql = "insert into {table} (settingid, dexno, coord, distance) value ({u.discordid}, {dexno}, {coord}, {distance}) on duplicate key update coord={coord}".format(u=user,
-                                                                                                                                                                         dexno=dexno,
-                                                                                                                                                                         coord=coord,
-                                                                                                                                                                         distance=distance)
+        fmt = "insert into {table} (settingid, dexno, spawntype, coord, distance) value ({u.discordid}, {dexno}, {spawntype}, {coord}, {distance}) on duplicate key update coord={coord}"
+        sql = fmt.format(u=user,
+                         dexno=dexno,
+                         spawntype=spawntype,
+                         coord=coord,
+                         distance=distance)
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
         pass
 
 
-    def choose_listeners(self, pokemon, center):
+    def choose_listeners(self, pokemon, spawntype, center):
         longest = geopy.distance.distance(kilometers=16)
         hexgon = "POLYGON((" + ",".join( [ "%g %g" % (point.latitude, point.longitude) for point in [ longest.destination(center, angle) for angle in range(0, 361, 60) ] ] ) + "))"
         dbh = self.db.cursor()
-        sql = "select t2.discordid, t2.pm_channel, t1.distance, ST_AsText(t1.coord) from {me} as t1, {master} as t2 where t2.on_off = 'y' and MBRContains(ST_GeomFromText('{hexgon}'), t1.coord) and t1.settingid = t2.settingid and dexno={dexno}".format(me=self.table_name, master=self.master_table, hexgon=hexgon, dexno=self.pokemons[pokemon])
+        fmt = "select t2.discordid, t2.pm_channel, t1.distance, ST_AsText(t1.coord) from {me} as t1, {master} as t2 where t2.on_off = 'y' and MBRContains(ST_GeomFromText('{hexgon}'), t1.coord) and t1.settingid = t2.settingid and dexno={dexno} and t1.spawntype = {spawntype}"
+        sql = fmt.format(me=self.table_name, master=self.master_table, hexgon=hexgon, dexno=self.pokemons[pokemon], spawntype=spawntype)
         dbh.execute(sql)
 
         users = []
@@ -181,14 +188,14 @@ create table if not exists {table}
         return users
 
 
-
-
     # This is for testing only however
-    def find_users_by_pokemon(self, pokemon):
+    def find_users_by_pokemon(self, pokemon, spawntype):
         dbh = self.db.cursor()
-        sql = "select t2.discordid, ST_AsText(t1.coord) from {me} as t1, {master} as t2 where t1.dexno = {dexno} and t1.settingid = t2.settingid".format(me=self.table_name,
-                                                                                                                                                         master=self.master_table,
-                                                                                                                                                         dexno=self.pokemons[pokemon])
+        fmt="select t2.discordid, ST_AsText(t1.coord) from {me} as t1, {master} as t2 where t1.dexno = {dexno} and t1.settingid = t2.settingid and spawntype={spawntype}"
+        sql = fmt.format(me=self.table_name,
+                         master=self.master_table,
+                         spawntype=spawntype,
+                         dexno=self.pokemons[pokemon])
         dbh.execute(sql)
 
         users = []
@@ -215,7 +222,7 @@ create table if not exists {table}
     # This is for testing only however
     def report_for_user(self, discordid):
         dbh = self.db.cursor()
-        fmt = "select t3.name, t1.distance, ST_AsText(t1.coord) from {me} as t1, {master} as t2, pokemon as t3 where t1.dexno = t3.dexno and t1.settingid = t2.settingid and t2.discordid = '{discordid}' order by t3.dexno"
+        fmt = "select t3.name, t1.distance, ST_AsText(t1.coord), t1.spawntype, t2.on_off from {me} as t1, {master} as t2, pokemon as t3 where t1.dexno = t3.dexno and t1.settingid = t2.settingid and t2.discordid = '{discordid}' order by t1.spawntype, t3.dexno"
         sql = fmt.format(me=self.table_name,
                          master=self.master_table,
                          discordid=discordid)
@@ -223,25 +230,40 @@ create table if not exists {table}
         dbh.execute(sql)
 
         first_line = ""
-        outputs = []
+        spawns = []
+        raids = []
         user_loc = Point()
         line_no = 0
         while True:
             row = dbh.fetchone()
             if row == None:
                 break
-            pokemon_name, distance, coord = row
+            pokemon_name, distance, coord, spawntype, on_off = row
             lat_lng = [ float(value) for value in coord.replace("POINT(", "").replace(")", "").split(" ") ]
             if line_no == 0:
-                first_line = "From https://maps.google.com/maps?q=%s,%s\n" % (lat_lng[0], lat_lng[1])
+                fmt = "%s - From https://maps.google.com/maps?q=%s,%s"
+                first_line = fmt % ("PM on" if on_off == 'y' else "PM off", lat_lng[0], lat_lng[1])
                 pass
-            line_no = line_no + 1
-            outputs.append("%s in %dm" % (pokemon_name, distance))
 
+            line_no = line_no + 1
+
+            if spawntype == 0:
+                spawns.append("%s in %d" % (pokemon_name, distance))
+                pass
+            else:
+                raids.append("%s in %d" % (pokemon_name, distance))
+                pass
             pass
         dbh.close()
         self.db.commit()
-        return first_line + ", ".join(outputs)
+        result = first_line
+        if len(spawns) > 0:
+            result = result + "\n Spawns: " + ", ".join(spawns)
+            pass
+        if len(raids) > 0:
+            result = result + "\n Raids: " + ", ".join(raids)
+            pass
+        return result
 
     pass
 
@@ -255,31 +277,30 @@ def test():
     db.drop_table()
     db.create_table()
 
-    user1 = Subscriber("user1", coordinates=Point(10.0001, 10.0001), pokemons="bulbasaur,ivysaur,venusaur")
-    user2 = Subscriber("user2", coordinates=Point(10.0002, 10.0002), pokemons="ivysaur,venusaur")
-    user3 = Subscriber("user3", coordinates=Point(10.0003, 10.0003), pokemons="venusaur")
-    user4 = Subscriber("user4", coordinates=Point(10.1, 10.1), pokemons="bulbasaur,ivysaur,venusaur")
-    user5 = Subscriber("user5", coordinates=Point(10.0005, 10.0005))
+    seldb = SelectionDB(account["db-username"], account["db-password"], master_table="test")
+    seldb.drop_table()
+    seldb.create_table()
+
+    user1 = Subscriber("user1", "pm1", db, seldb, coordinates=Point(10.0001, 10.0001), spawns="bulbasaur,ivysaur,venusaur", raids="raikou,entei,suicune")
+    user2 = Subscriber("user2", "pm2", db, seldb, coordinates=Point(10.0002, 10.0002), spawns="ivysaur,venusaur", raids="raikou")
+    user3 = Subscriber("user3", "pm3", db, seldb, coordinates=Point(10.0003, 10.0003), spawns="venusaur", raids="raikou")
+    user4 = Subscriber("user4", "pm4", db, seldb, coordinates=Point(10.1, 10.1), spawns="bulbasaur,ivysaur,venusaur", raids="raikou")
+    user5 = Subscriber("user5", "pm5", db, seldb, coordinates=Point(10.0005, 10.0005))
 
     users = [user1, user2, user3, user4, user5]
 
     for user in users:
         db.put_user_data(user)
-        print ("user: {u.discordid},  surrogateid: {u.surrogateid}, pokemons: {u.pokemons}".format(u=user))
+        print ("user: {u.discordid},  surrogateid: {u.surrogateid}, spawns: {u.spawns}, raids: {u.raids}".format(u=user))
         pass
-
-
-    seldb = SelectionDB(account["db-username"], account["db-password"], master_table="test")
-    seldb.drop_table()
-    seldb.create_table()
 
     for user in users:
         seldb.set_user_selection(user)
         pass
 
-    print(seldb.find_users_by_pokemon("ivysaur"))
+    print(seldb.find_users_by_pokemon("ivysaur", 0))
 
-    print(seldb.choose_listeners("ivysaur", Point(10.0, 10.0)))
+    print(seldb.choose_listeners("ivysaur", 0, Point(10.0, 10.0)))
 
     print (seldb.report_for_user("user2"))
     pass

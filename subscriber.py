@@ -29,7 +29,10 @@ class Subscriber:
                  settingdb,
                  selectiondb,
                  coordinates=None,
-                 mysql_geom_coord=None, distance=5000, on_off='y', pokemons="mareep,flaaffy,ampharos,unown,chansey,blissey,larvitar,pupitar,tyranitar,porygon", surrogateid=None):
+                 mysql_geom_coord=None, distance=1500, on_off='y',
+                 spawns="mareep,flaaffy,ampharos,unown,chansey,blissey,larvitar,pupitar,tyranitar,porygon",
+                 raids="raikou",
+                 surrogateid=None):
         create_new_user = True
 
         self.coordinates = coordinates
@@ -43,7 +46,8 @@ class Subscriber:
             self.set_mysql_geom(mysql_geom_coord)
             pass
         self.distance = distance # in meter
-        self.pokemons = pokemons #
+        self.spawns = spawns # spawns
+        self.raids = raids # raids
         self.on_off = on_off # switch
 
         dbh = self.settingdb.db.cursor()
@@ -87,12 +91,12 @@ class Subscriber:
         return "%s\n%s" % (self.discordid, self.selectiondb.report_for_user(self.discordid))
 
 
-    def set_range(self, pokemons, distance):
-        return self.selectiondb.update_range(self.surrogateid, pokemons, self.coordinates, distance)
+    def set_range(self, spawntype, spawns, distance):
+        return self.selectiondb.update_range(self.surrogateid, spawntype, spawns, self.coordinates, distance)
 
 
-    def delete_pokemons(self, pokemons):
-        return self.selectiondb.delete_pokemons(self.surrogateid, pokemons)
+    def delete_spawns(self, spawns):
+        return self.selectiondb.delete_spawns(self.surrogateid, 0, spawns)
 
 
     # Only for test
@@ -142,17 +146,17 @@ def test():
     seldb.drop_table()
     seldb.create_table()
 
-    user1 = Subscriber("user1", "1", udb, seldb, coordinates=Point(10.0001, 10.0001), pokemons="bulbasaur,ivysaur,venusaur")
-    user2 = Subscriber("user2", "2", udb, seldb, coordinates=Point(10.0002, 10.0002), pokemons="ivysaur,venusaur")
-    user3 = Subscriber("user3", "3", udb, seldb, coordinates=Point(10.0003, 10.0003), pokemons="venusaur")
-    user4 = Subscriber("user4", "4", udb, seldb, coordinates=Point(10.1, 10.1), pokemons="bulbasaur,ivysaur,venusaur")
+    user1 = Subscriber("user1", "1", udb, seldb, coordinates=Point(10.0001, 10.0001), spawns="bulbasaur,ivysaur,venusaur", raids="tyranitar,raikou,entei,suicune")
+    user2 = Subscriber("user2", "2", udb, seldb, coordinates=Point(10.0002, 10.0002), spawns="ivysaur,venusaur")
+    user3 = Subscriber("user3", "3", udb, seldb, coordinates=Point(10.0003, 10.0003), spawns="venusaur")
+    user4 = Subscriber("user4", "4", udb, seldb, coordinates=Point(10.1, 10.1), spawns="bulbasaur,ivysaur,venusaur")
     user5 = Subscriber("user5", "5", udb, seldb, coordinates=Point(10.0005, 10.0005))
 
     users = [user1, user2, user3, user4, user5]
 
     for user in users:
         udb.put_user_data(user)
-        seldb.update_range(user.surrogateid, user.pokemons, user.coordinates, user.distance)
+        seldb.update_range(user.surrogateid, 0, user.spawns, user.coordinates, user.distance)
         pass
 
 
@@ -165,7 +169,7 @@ def test():
 
     temp = Subscriber("user5", "5", udb, seldb)
     print ("surrogateid %d, pm_channel %s" % (temp.surrogateid, temp.pm_channel))
-    temp.set_range("ivysaur,mareep,unown", 4000)
+    temp.set_range(0, "ivysaur,mareep,unown", 4000)
 
     print("---")
 
@@ -177,7 +181,7 @@ def test():
     temp = Subscriber("user5", "5", udb, seldb)
     print (temp.report_for_user())
 
-    temp.delete_pokemons("mareep,unown,ivysaur,dratini")
+    temp.delete_spawns("mareep,unown,ivysaur,dratini")
 
     print (temp.report_for_user())
 

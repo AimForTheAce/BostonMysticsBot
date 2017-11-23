@@ -19,7 +19,7 @@ class Subscriber:
         pass
 
     def resolve_address(self):
-        loc = self.geoloc.lookup(self.address)
+        (loc, sponsor, zipcode) = self.geoloc.lookup(self.address)
         if loc is not None:
             self.coordinates = Point(loc.latitude, loc.longitude)
             pass
@@ -50,6 +50,8 @@ class Subscriber:
         self.raids = raids # raids
         self.on_off = on_off # switch
 
+        # This is clearly not the right way to do this
+        self.settingdb.open_db()
         dbh = self.settingdb.db.cursor()
         sql = "select settingid, pm_channel, address, coordinates, on_off, distance from %s where discordid = '%s'" % (self.settingdb.table_name, discordid)
         dbh.execute(sql)
@@ -69,6 +71,7 @@ class Subscriber:
 
         self.settingdb.db.commit()
         dbh.close()
+        self.settingdb.close_db()
         pass
     
     def set_mysql_geom(self, coord):
@@ -87,13 +90,13 @@ class Subscriber:
         pass
 
 
-    def report_for_user(self):
-        return "%s\n%s" % (self.discordid, self.selectiondb.report_for_user(self.discordid))
+    def report_for_user(self, brief=False):
+        firstline = "" if brief else "%s\n" % self.discordid
+        return firstline + self.selectiondb.report_for_user(self.discordid, brief=brief)
 
 
     def set_range(self, spawntype, spawns, distance):
         return self.selectiondb.update_range(self.surrogateid, spawntype, spawns, self.coordinates, distance)
-
 
     def delete_spawns(self, spawns):
         return self.selectiondb.delete_spawns(self.surrogateid, 0, spawns)

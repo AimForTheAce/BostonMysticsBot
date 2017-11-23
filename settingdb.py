@@ -8,22 +8,32 @@ class SettingDB:
 
     def __init__(self, uname, pw, table_name="setting", db_name="doublefault"):
         self.table_name = table_name
-        try:
-            self.db = mysql.connector.connect(user=uname, password=pw, database=db_name)
-        except:
-            self.db = None
-            pass
+        self.db_name = db_name
+        self.db_user = uname
+        self.db_pw = pw
+        self.db = None
         pass
 
+    def open_db(self):
+        self.db = mysql.connector.connect(user=self.db_user, password=self.db_pw, database=self.db_name)
+        pass
 
+    def close_db(self):
+        self.db.close()
+        self.db = None
+        pass
+        
     def drop_table(self):
+        self.open_db()
         dbh = self.db.cursor()
         dbh.execute("drop table if exists %s" % self.table_name)
         dbh.close()
         self.db.commit()
+        self.close_db()
         pass
 
     def create_table(self):
+        self.open_db()
         dbh = self.db.cursor()
         sql = '''
 create table if not exists {table}
@@ -38,10 +48,12 @@ create table if not exists {table}
         dbh.execute(sql)
         dbh.close()
         self.db.commit()
+        self.close_db()
         pass
 
 
     def put_user_data(self, user):
+        self.open_db()
         dbh = self.db.cursor()
         query = "insert into {table} (discordid, pm_channel, on_off, address, coordinates, distance) values ".format(table=self.table_name)
         values = "('{u.discordid}', '{u.pm_channel}', '{u.on_off}', '{u.address}', '{u.coordinates.latitude},{u.coordinates.longitude}', {u.distance})".format(u=user)
@@ -57,10 +69,13 @@ create table if not exists {table}
             pass
         self.db.commit()
         dbh.close()
+        self.close_db()
         pass
 
 
     def set_enable(self, discordid, on_off):
+        self.open_db()
+
         dbh = self.db.cursor()
         sql = "update {table} set on_off = '{on_off}' where discordid = '{discordid}'".format(table=self.table_name,
                                                                                             on_off=on_off,
@@ -68,15 +83,19 @@ create table if not exists {table}
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
+
+        self.close_db()
         pass
 
 
     def purge(self, discordid):
+        self.open_db()
         dbh = self.db.cursor()
         sql = "delete from {table} where discordid = '{discordid}'".format(table=self.table_name, discordid=discordid)
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
+        self.close_db()
         pass
 
 

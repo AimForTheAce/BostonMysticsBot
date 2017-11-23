@@ -1,5 +1,5 @@
 
-import sys, time, mysql.connector, geopy.point, geopy.distance, json, re
+import sys, time, mysql.connector, geopy.point, geopy.distance, json, re, csv
 
 from geopy.point import Point
 
@@ -50,6 +50,13 @@ class PokemonDB:
         dbh.close()
         pass
 
+    def delete_pokemon(self, dexno, name):
+        dbh = self.db.cursor()
+        query = "delete from {table} where dexno={dexno} and name='{name}'".format(table=self.table_name, dexno=dexno, name=name.lower())
+        dbh.execute(query)
+        self.db.commit()
+        dbh.close()
+        pass
 
     def find_pokemon_by_name(self, name):
         user = pokemon
@@ -76,26 +83,36 @@ def main():
     # db.drop_table()
     # db.create_table()
 
-    filename = "pokemon.txt"
+    # filename = "pokemon.txt"
+    filename = "pokemon.csv"
+
     dexno = 0
     src = open(filename)
-    name = None
+    pokemon_csv = csv.reader(src)
+    # name = None
 
-    type_re = re.compile(r'^Type: (.+)$')
-    fast_re = re.compile(r'^Fast Attacks: (.+)$')
-    charge_re = re.compile(r'^Special Attacks: (.+)$')
-    evo_to_re = re.compile(r'^Evolves Into: (.+)$')
+    # type_re = re.compile(r'^Type: (.+)$')
+    # fast_re = re.compile(r'^Fast Attacks: (.+)$')
+    # charge_re = re.compile(r'^Special Attacks: (.+)$')
+    # evo_to_re = re.compile(r'^Evolves Into: (.+)$')
     
-    for line in src.readlines():
-        if line[0] != ' ':
-            dexno = dexno + 1
-            name = line.strip().lower()
+    lineno = 0
+
+    for row in pokemon_csv:
+        lineno = lineno + 1
+        if lineno == 1:
+            continue
+        dexno = row[2]
+        name = row[1]
+        if name.count('-') > 0:
+            db.delete_pokemon(dexno, name)
+        else:
             db.put_pokemon(dexno, name)
             pass
         pass
 
-    db.put_pokemon(-1, "iv100")
-    db.put_pokemon(-2, "iv90")
+    # db.put_pokemon(-1, "iv100")
+    # db.put_pokemon(-2, "iv90")
 
     pass
 

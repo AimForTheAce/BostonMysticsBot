@@ -6,7 +6,7 @@
 	    {
     		"main-channel": "post-avatar-screenshot-to-join",
 		"info-channel": "rules-and-announcements",
-		"greetings-main": "Welcome {0.mention} to the {1.name} Discord. Please post a screenshot of your Pokemon Go trainer screen and someone will be around shortly to add you.",
+		"greetings-main": "Welcome {0.mention} to the {1.name} Discord. **Your Mystic account has not been verified yet. You are still a guest.**\nPlease post a screenshot of your Pokemon Go trainer screen and someone will be around shortly to add you.",
 	    "greetings-info": "Meanwhile, please take a look at the {0.mention}!"
 	    }
 	],
@@ -23,23 +23,31 @@
 			   
 
     "count" : "Boston Mystics",
-    "scanner" : "BostonPogoMap",
+    "local-scanner" : "BostonPogoMap",
+    "scanners" : [ "BostonPogoMap", "middlesexpkmn" ],
 
     "channel-map":  [ { "source":      { "server": "BostonPogoMap",  "channel" : "iv100" },
-			"destination": { "server": "Boston Mystics", "channel" : "100-percent-pokemon-hunting" },
+			"destination": { "server": "Boston Mystics", "channel" : "100-percent-pokemon-sightings" },
 		        "format" : "100" },
 		      { "source":      { "server": "BostonPogoMap",  "channel" : "unown" },
 			"destination": { "server": "Boston Mystics", "channel" : "unown" },
 		        "format" : "spawn" },
 		      { "source":      { "server": "BostonPogoMap",  "channel" : "raid-legendary" },
-			"destination": { "server": "Boston Mystics", "channel" : "raikou-raid" },
-		        "format" : "tear-5",
-		        "pokemon": "Raikou" }
+			"destination": { "server": "Boston Mystics", "channel" : "tier-5-raid" },
+		        "format" : "tier-5", "pokemon": "" },
+		      { "source":      { "server": "middlesexpkmn",  "channel" : "burlingtonraid" },
+			"destination": { "server": "Boston Mystics", "channel" : "tier-5-raid" },
+		        "format" : "rocketmap-raid", "pokemon": "" },
+		      { "source":      { "server": "middlesexpkmn",  "channel" : "burlingtonegg" },
+			"destination": { "server": "Boston Mystics", "channel" : "tier-5-raid" },
+		        "format" : "rocketmap-egg", "pokemon": "" }
 		    ],
 
     "raid-channels": ["raid-level-4", "raid-legendary"],
     
     "bot-reply": "I'm a bot, written by AimForTheAce.\n",
 
-    "ur-welcome": "You are welcome. FYI, I am a bot written by AimForTheAce."
+    "ur-welcome": "You are welcome. FYI, I am a bot written by AimForTheAce.",
+
+    "tier-5-boss": "Suicune"
 }

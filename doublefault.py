@@ -2,6 +2,7 @@
 
 import discord, json, sys, time, re, mysql.connector, geopy, datetime
 import discord.user
+import traceback
 
 from subscriber import Subscriber
 from settingdb import SettingDB
@@ -19,6 +20,9 @@ google_map_re = re.compile(r"maps.google.com/maps\?q=([+-]{0,1}\d+\.\d+),([+-]{0
 
 firstline_re = re.compile(r"\*\*(\w+)\*\*\s*-\s*Level:\s*(\d+)")
 
+google_map_format = "https://maps.google.com/maps?q={lat},{lon}"
+
+debugging = False
 
 
 def parse_spawn_message(spawn):
@@ -103,12 +107,15 @@ class DoubleFault(discord.Client):
     
     set_raid_channels_re = re.compile("^set raid channels (.+)$")
     gymhuntr_raid_clock_re = re.compile('Raid Ending: (\d+) hours (\d+) min (\d+) sec')
+    gymhuntr_egg_clock_re = re.compile('Raid Starting: (\d+) hours (\d+) min (\d+) sec')
     raid_level_re = re.compile('Level (\d+) Raid')
     gymhuntr_raid_coord_re = re.compile('https://GymHuntr\.com/#([+-]{0,1}\d+\.\d+),([+-]{0,1}\d+\.\d+)')
 
 
     def __init__(self):
         super().__init__()
+
+        self.start_time = time.time()
 
         self.config = json.load(open( "/var/lib/doublefault/config.json"))
         self.account = json.load(open("/var/lib/doublefault/account.json"))
@@ -123,12 +130,17 @@ class DoubleFault(discord.Client):
         self.raid_data_file = None
         self.raid_channels = self.config["raid-channels"]
 
-        self.settingdb = SettingDB(self.account["db-username"], self.account["db-password"])
+        self.open_db()
+
         self.settingdb.create_table()
-        self.selectiondb = SelectionDB(self.account["db-username"], self.account["db-password"])
         self.selectiondb.create_table()
 
         self.geoloc = geocache.get_cached_geolocator()
+        pass
+
+    def open_db(self):
+        self.settingdb = SettingDB(self.account["db-username"], self.account["db-password"])
+        self.selectiondb = SelectionDB(self.account["db-username"], self.account["db-password"])
         pass
 
 
@@ -138,7 +150,7 @@ class DoubleFault(discord.Client):
         if not member.server.name in self.greeting_servers.keys():
             return
 
-        self.new_members.append(member)
+        # self.new_members.append(member)
 
         # if this is a 
         greeting_spec = self.greeting_servers[member.server.name]
@@ -158,10 +170,14 @@ class DoubleFault(discord.Client):
 
         greetings_info = greeting_spec.get("greetings-info")
         if info_channel is not None and greetings_info is not None:
-            message = message + "\n" + greetings_info.format(info_channel)
+            message = message + "  " + greetings_info.format(info_channel)
             pass
 
         await self.send_message(server, message)
+
+        if member.server.name == "Boston Mystics":
+            await self.send_message(member, "**Reminder from Boston Mystics Discord: Please verify your Pokemon Go account. If you need help, ask us about how on the #post-avatar-screenshot-to-join channel of Boston Mystics Discord. Hope to see you around soon.**")
+            pass
         pass
 
         if len(self.greeters) > 0:
@@ -174,6 +190,7 @@ class DoubleFault(discord.Client):
 
 
     async def on_message(self, message):
+
         # If I'm dispatching the message that I sent, ignore
         if message.author == self.user:
             return
@@ -189,6 +206,7 @@ class DoubleFault(discord.Client):
         await self.handle_server_message(message)
         return
             
+
     async def handle_server_message(self, message):
         # Handing the message
 
@@ -200,11 +218,14 @@ class DoubleFault(discord.Client):
                     dst_server, dst_channel, format_spec, everyone, pokemon_spec = destination_spec
                     lines = message.content.split("\n")
                     if format_spec == "raid":
-                        output = " ".join( filter_lines(lines, ["Moveset", "Start", "End", "Address", "Google"]) )
+                        output = " ".join( filter_lines(lines, ["Moveset", "Start", "End",  "Current Team", "Address", "Google"]) )
                         pass
-                    elif format_spec == "tear-5":
+                    elif format_spec == "tier-5":
                         output = None
-                        if lines[0].count(pokemon_spec) > 0:
+                        is_egg = lines[0].lower().count("**egg**") > 0
+
+                        # hack - Just relay everything 
+                        if True:
                             google_addr = filter_lines(lines, ["Google"])
                             coord = None
                             if len(google_addr) == 2:
@@ -213,14 +234,23 @@ class DoubleFault(discord.Client):
                             addr = ""
                             try:
                                 if coord is not None:
-                                    revaddr = self.geoloc.lookup_reverse(coord)
+                                    (revaddr, sponsor, zipcode) = self.geoloc.lookup_reverse(coord)
                                     addr = revaddr + "\n"
                                     pass
+                                pass
                             except:
                                 # Just eat up the lookup error
-                                print ("lookup reverse '%s' failed" % str(coord))
+                                print ("lookup reverse '{c.latitude},{c.longitude}' failed.".format(c=coord))
+                                traceback.print_last(file=sys.stdout)
                                 pass
-                            output = addr + " ".join( filter_lines(lines, ["Moveset", "Start", "End", "Address", "Google"]) )
+                            if is_egg:
+                                lines = filter_lines(lines, ["Start", "End"])
+                            else:
+                                lines = filter_lines(lines, ["Moveset", "Start", "End", "Current Team"])
+                                pass
+                            output = title=lines[0] + " " + addr + " " +  " ".join(lines[1:]) + " " + google_map_format.format(lat=coord.latitude, lon=coord.longitude)
+                            await self.send_message(dst_channel, output)
+                            output = None
                             pass
                         pass
                     elif format_spec == "100":
@@ -229,9 +259,18 @@ class DoubleFault(discord.Client):
                     elif format_spec == "spawn":
                         output = " ".join( filter_lines(lines, ["Until", "Address", "Google"]) )
                         pass
+                    elif format_spec == "rocketmap-raid":
+                        # near future expansion here
+                        output = None
+                        pass
+                    elif format_spec == "rocketmap-egg":
+                        # near future expansion here
+                        output = None
+                        pass
                     else:
                         output = message.content
                         pass
+
                     if everyone:
                         output = "@everyone " + output
                         pass
@@ -242,16 +281,21 @@ class DoubleFault(discord.Client):
                 pass
             pass
     
-        if message.server.name == self.config["scanner"]  and message.channel.name in self.raid_channels:
-            await self.save_raid_data(message.content)
-            await self.relay_raid(message.content)
+        # Raid data now needs a patch up.
+        raid_data = None
+        if message.server.name == self.config["local-scanner"] or message.server.name in self.config["scanners"]:
+            raid_data = message.content.replace('<@&358248674846834689>', '-----------------------------------')
             pass
 
-        if message.server.name == self.config["scanner"]:
+        if message.server.name == self.config["local-scanner"] and message.channel.name in self.raid_channels:
+            await self.save_raid_data(raid_data)
+            await self.relay_raid(raid_data)
+            pass
+
+        if message.server.name in self.config["scanners"]:
             pokemon = message.channel.name.lower()
-            await self.relay_spawn(pokemon, message.content)
+            await self.relay_spawn(pokemon, raid_data)
             pass
-
 
         i_am = self.user
         if i_am in message.mentions:
@@ -285,10 +329,14 @@ class DoubleFault(discord.Client):
                     for line in lines:
                         if line.count("Until") > 0: reply = reply + " " + line
                         if line.count("Address") > 0: reply = reply + " " + line
-                        if line.count("Google") > 0: reply = reply + "\n" + line
                         pass
                     reply = reply + " **Distance**: %d meters" % meter
-                    await self.send_message(where, reply)
+
+                    output = discord.Embed(title=reply,
+                                           url=google_map_format.format(lat=coord.latitude, lon=coord.longitude))
+                    await self.send_message(where, embed=output)
+
+                    # await self.send_message(where, reply)
                     pass
                 pass
             else:
@@ -338,14 +386,29 @@ class DoubleFault(discord.Client):
             level = match.group(2)
             pass
         else:
-            # print(lines[0])
+            if debugging:
+                print(lines[0])
+                pass
             return
+
+        # Only care the legendary eggs
+        is_egg = False
+        if pokemon.lower() == "egg" and int(level) >= 5:
+            # When Mewtwo shows up, I'm in a bit of trouble
+            pokemon = self.config["tier-5-boss"].lower()
+            is_egg = True
+            pass
 
         dexno = self.selectiondb.pokemons.get(pokemon)
         if dexno is not None:
             coord = parse_spawn_message(spawn_data)
             if coord is not None:
                 listeners = self.selectiondb.choose_listeners(pokemon, 1, coord)
+                if debugging:
+                    # print(dir(coord))
+                    print(pokemon + " - listeners = " + repr(listeners) + " for {lat}, {lon})".format(lat=coord.latitude, lon=coord.longitude))
+                    pass
+
                 for listener in listeners:
                     discord_id, pm_channel, center, meter = listener
                     discriminator = None
@@ -361,7 +424,15 @@ class DoubleFault(discord.Client):
                     lines = spawn_data.split("\n")
                     reply = lines[0]
                     for line in lines:
+                        if is_egg:
+                            if line.count("Start") > 0: reply = reply + " " + line
+                            if line.count("End") > 0: reply = reply + " " + line
+                        else:
+                            if line.count("Start") > 0: reply = reply + " " + line
+                            if line.count("End") > 0: reply = reply + " " + line
+                            pass
                         if line.count("Until") > 0: reply = reply + " " + line
+                        if line.count("Current Team") > 0: reply = reply + " " + line
                         if line.count("Address") > 0: reply = reply + " " + line
                         if line.count("Google") > 0: reply = reply + "\n" + line
                         pass
@@ -436,8 +507,16 @@ class DoubleFault(discord.Client):
                 await self.handle_user_command(words[0], message)
             except Exception as exc:
                 await self.send_message(message.channel, "The command failed. AimForTheAce needs to fix the bug.")
-                raise exc
+                tbfile = open("/var/spool/doublefault/bad-mojo.txt", "a+")
+                traceback.print_last(file=tbfile)
+                tbfile.close()
                 pass
+            pass
+        elif len(words) > 1 and words[0] in [ "help", "hello"]:
+            await self.send_message(message.channel, 'Hello! I am up and running. Try "spawn help".')
+            pass
+        else:
+            reply = 'If you want to use spawn/raid relay but not sure the command, type "spawn help" see the help message.'
             pass
 
         if reply is not None:
@@ -461,6 +540,7 @@ class DoubleFault(discord.Client):
         if words[0] == "pin":
             user = Subscriber(discordid, pm_channel, self.settingdb, self.selectiondb)
             address = " ".join(words[1:])
+            # This only sets the coords in the instance
             await user.set_address(address)
 
             if user.surrogateid is None:
@@ -471,11 +551,13 @@ class DoubleFault(discord.Client):
                 self.selectiondb.update_range(user.surrogateid, 1, user.raids, user.coordinates, user.distance)
                 pass
             else:
+                # print ("update {sid}: {c.latitude}, {c.longitude}".format(sid=user.surrogateid, c=user.coordinates))
+                self.settingdb.put_user_data(user)
                 self.selectiondb.update_coord(user.surrogateid, user.coordinates)
                 pass
 
-            reply = "https://maps.google.com/maps?q={lat},{lon}".format(lat=user.coordinates.latitude,
-                                                                        lon=user.coordinates.longitude)
+            reply = google_map_format.format(lat=user.coordinates.latitude,
+                                             lon=user.coordinates.longitude)
             await self.send_message(message.channel, reply)
             pass
         
@@ -517,6 +599,9 @@ class DoubleFault(discord.Client):
                         if len(reply) > 0:
                             await self.send_message(message.channel, "bad pokemon names\n" + reply)
                             pass
+                        else:
+                            await self.send_message(message.channel, "got it. Use spawn info to see your settings.")
+                            pass
                         pass
                     pass
                 else:
@@ -545,12 +630,12 @@ class DoubleFault(discord.Client):
                 pass
             pass
 
-        elif words[0] == "start":
+        elif words[0] in [ "start", "on" ]:
             self.settingdb.set_enable(discordid, 'y')
             await self.send_message(message.channel, "Spawn relay is on")
             pass
 
-        elif words[0] == "stop":
+        elif words[0] in [ "stop", "off" ]:
             self.settingdb.set_enable(discordid, 'n')
             await self.send_message(message.channel, "Spawn relay is off")
             pass
@@ -569,10 +654,15 @@ class DoubleFault(discord.Client):
         elif words[0] == "delete":
             user = Subscriber(discordid, pm_channel, self.settingdb, self.selectiondb)
             if user.surrogateid:
+                reply = ""
                 if len(words) > 1:
                     pokemons = words[1]
                     self.selectiondb.delete_spawns(user.surrogateid, spawntype, pokemons)
                     pass
+                else:
+                    reply = "Nothing deleted. "
+                    pass
+                await self.send_message(message.channel, reply + user.report_for_user(brief=True))
                 pass
             else:
                 await self.send_message(message.channel, "There is abyss already.")
@@ -581,29 +671,16 @@ class DoubleFault(discord.Client):
 
 
         elif words[0] == "help":
-            usage = '''**See also '{code} example' especially if this is your first time.**
-
-{code} pin <address>
-  sets up the location you are interested in.
-
-{code} info
-  prints out what DoubleFault knows
-
-{code} start
-{code} stop
-  starts/stops the spawn relay.
-
-range [pokemons,...] <distance(meter)>
+            usage = '''**See '{code} example' for first time user.**
+**For raid, use "raid" instead of "{code}" to set up raid relay.**
+**{code} pin <address>**  sets up the location you are interested in.
+**{code} info**  prints out what DoubleFault knows
+**{code} start** / **{code} stop**  starts/stops the spawn relay.
+**{code} range [pokemons,...] <distance(meter)>**
   set the pokemon you care and it's range you wnt to see. This command can add more pokemons you want to see.
-
-{code} all <distance(meter)>
-  All of spawn max distance is set to it.
-
-{code} delete [pokemons,]
-  delete the spawn setting of pokemons
-
-{code} bye
-  forget all about you.
+**{code} all <distance(meter)>**  All of spawn max distance is set to it.
+**{code} delete [pokemons,]** delete the spawn setting of pokemons
+**{code} bye** forget all about you.
 '''.format(code=self.account["bot-prefix"])
 
             await self.send_message(message.channel, usage)
@@ -613,57 +690,27 @@ range [pokemons,...] <distance(meter)>
             example = '''
 Please remember that the code word **'{code}'**. The spawn relay command only works when you use the code word. Every command needs to start with '{code}'.
 
-**How to start**
+** First - set your address**  {code} pin arlington town hall, ma
+Any address that works for Google Map works.
 
-{code} pin arlington town hall, ma
+**See what's I'm getting**     {code} info
+shows current setting. Distance is in meter.
 
-This kicks the spawn realy into gear. When the address look up is done, DoubleFault replies with the google map link with the coordinates. You can see where you pinned yourself.
+**Add more pokemon I care**    {code} range golem 2000
 
-**See what's I'm getting**
-
-{code} info
-
-It tells you the current location, and list of pokemons and range from your location. The number is in meters. (Yes, metric.) 1600 meters is 1 mile, FYI. 
-
-**Add more pokemon I care**
-
-{code} range golem 2000
-
-So, now you told DoubleFault you are insterested in golem within 2000 meters from you. You can update the distance with same command.
-
-
-**Delete some pokemon**
-
-So, when you don't care unown, you can delete the spawn relay selection by
-
-{code} delete unown
-
-**Changing my location**
-
-When you want to change your location, use the pin command again. It updates all of your spawn relay request location.
-
+**Delete spawns/raid**         {code} delete unown
+                               raid delete wheezy
 
 **Setting the range of all spawn relay requests at once**
-
-{code} all 1500
-
-Now, you changed all of your spawn relay requests' ranges to 1500 meters. Use "{code} info" to make sure it's all updated.
+{code} all 1500  or  raid all 2000
 
 **Starting and stopping the spawn relay service**
+{code} start / {code} stop
 
-{code} start
-{code} stop
-
-The pokemon selections and settings don't change but you can start/stop the spawn relay message to your PM.
-
-**Leaving the spawn relay service**
-
-{code} bye
-
+**Quit the relay service**      {code} bye
 It purges all your settings and forget about you.
 
 **About distance**
-
 Unit of distance is metric - meter. The minimum range is 100 and maximum range is 15000 - which is a little shy of 10 miles. I could give you more range but from what I saw, outside of 10 miles, you just cannot get to it very often. So, I capped it to 15,000 meters.
 '''
             await self.send_message(message.channel, example.format(code=self.account['bot-prefix']))
@@ -699,8 +746,8 @@ Unit of distance is metric - meter. The minimum range is 100 and maximum range i
             await self.relay_spawn("larvitar", data)
             pass
         elif words[0] == "raidtest":
-            wholedayfile = open("/var/spool/doublefault/raid.2017-09-03.txt")
-            wholeday = wholedayfile.read()
+            wholedayfile = open("/var/spool/doublefault/raidtest.txt")
+            wholeday = wholedayfile.read().replace('<@&358248674846834689>', '-----------------------------------')
             wholedayfile.close()
             tests = wholeday.split('''-----------------------------------
 
@@ -709,8 +756,11 @@ Unit of distance is metric - meter. The minimum range is 100 and maximum range i
             for testdata in tests:
                 await self.relay_raid(testdata + '-----------------------------------\n')
                 n_tests = n_tests + 1
-                if n_tests > 100:
+                if n_tests > 200:
                     break
+                pass
+            if debugging:
+                print("spawn test done. tests %d" % len(tests))
                 pass
             pass
         else:
@@ -741,6 +791,9 @@ Unit of distance is metric - meter. The minimum range is 100 and maximum range i
                     if m:
                         level = m.group(1)
                         pass
+
+                    is_egg = title.count("starting soon") > 0
+
                     description = embed['description']
                     thumbnail = embed['thumbnail']
                     # thumbnail url can be used to identify the pokedex number
@@ -750,27 +803,35 @@ Unit of distance is metric - meter. The minimum range is 100 and maximum range i
                     # desc
                     # '**Gym name here**\nJolteon\nCP: 19883.\n*Raid Ending: 0 hours 35 min 29 sec*'
                     lines = description.split('\n')
-                    gym = lines[0]
-                    pokemon_kind = lines[1]
-                    cp = lines[2]
-                    time_info = lines[3]
-                    m = self.gymhuntr_raid_clock_re.search(description, re.MULTILINE)
-                    hr = 0
-                    min = 0
-                    sec = 0
-                    if m:
-                        hr = m.group(1)
-                        min = m.group(2)
-                        sec = m.group(3)
-                        pass
+                    if is_egg:
+                        gym = lines[0]
+                        time_info = lines[1]
+                        m = self.gymhuntr_egg_clock_re.search(description, re.MULTILINE)
+                        hr = 0
+                        min = 0
+                        sec = 0
+                        if m:
+                            hr = m.group(1)
+                            min = m.group(2)
+                            sec = m.group(3)
+                            pass
 
-                    start_time = datetime.datetime.now()
-                    dt = datetime.timedelta(hours=int(hr), minutes=int(min), seconds=int(sec))
-                    end_time = start_time + dt
-                    start_time_str = start_time.strftime("%H:%M:%S")
-                    end_time_str = end_time.strftime("%H:%M:%S")
+                        t_minus = datetime.datetime.now()
+                        dt = datetime.timedelta(hours=int(hr), minutes=int(min), seconds=int(sec))
+                        start_time = t_minus + dt
+                        duration = datetime.timedelta(hours=1, minutes=0, seconds=0)
+                        end_time = start_time + duration
+                        start_time_str = start_time.strftime("%H:%M:%S")
+                        end_time_str = end_time.strftime("%H:%M:%S")
+                        cp = "0"
 
-                    raid_data = '''**{pokemon}** - Level: {raidlevel} - {cp}
+                        if level == "5":
+                            pokemon_kind = self.config["tier-5-boss"]
+                        else:
+                            pokemon_kind = "LEVEL %s" % level
+                            pass
+
+                        raid_data = '''**{pokemon}** - Level: {raidlevel} - {cp}
     
 **Moveset**: 
 
@@ -791,7 +852,53 @@ Unit of distance is metric - meter. The minimum range is 100 and maximum range i
                                               lon=longitude,
                                               gym=gym,
                                               cp=cp)
-                    await self.save_raid_data(raid_data)
+                        await self.save_raid_data(raid_data)
+                        await self.relay_raid(raid_data)
+                    else:
+                        gym = lines[0]
+                        pokemon_kind = lines[1]
+                        cp = lines[2]
+                        time_info = lines[3]
+                        m = self.gymhuntr_raid_clock_re.search(description, re.MULTILINE)
+                        hr = 0
+                        min = 0
+                        sec = 0
+                        if m:
+                            hr = m.group(1)
+                            min = m.group(2)
+                            sec = m.group(3)
+                            pass
+
+                        start_time = datetime.datetime.now()
+                        dt = datetime.timedelta(hours=int(hr), minutes=int(min), seconds=int(sec))
+                        end_time = start_time + dt
+                        start_time_str = start_time.strftime("%H:%M:%S")
+                        end_time_str = end_time.strftime("%H:%M:%S")
+
+                        raid_data = '''**{pokemon}** - Level: {raidlevel} - {cp}
+    
+**Moveset**: 
+
+**Start**: {startime}
+**End**: {endtime}
+
+**Current Team**: 
+
+**Gym**: {gym}
+**Address**: 
+**Map**: 
+**Google Map**: <https://maps.google.com/maps?q={lat},{lon}>
+-----------------------------------'''.format(pokemon=pokemon_kind,
+                                              raidlevel = level,
+                                              startime=start_time_str,
+                                              endtime=end_time_str,
+                                              lat=latitude,
+                                              lon=longitude,
+                                              gym=gym,
+                                              cp=cp)
+                        await self.save_raid_data(raid_data)
+                        await self.relay_raid(raid_data)
+                        pass
                     pass
                 pass
             pass

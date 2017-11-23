@@ -6,15 +6,15 @@ from geopy.point import Point
 class SelectionDB:
 
     def __init__(self, uname, pw, db_name="doublefault", master_table="setting"):
+        self.db_name = db_name
         self.table_name = "selection"
         self.master_table = master_table
-        try:
-            self.db = mysql.connector.connect(user=uname, password=pw, database=db_name)
-        except:
-            self.db = None
-            pass
-
+        self.db_user = uname
+        self.db_pw = pw
+        self.db = None
         self.pokemons = {}
+
+        self.open_db()
         dbh = self.db.cursor()
         dbh.execute("select dexno, name from pokemon")
         while True:
@@ -25,17 +25,30 @@ class SelectionDB:
             self.pokemons[name] = dexno
             pass
         dbh.close()
+        self.close_db()
+        pass
+
+    def open_db(self):
+        self.db = mysql.connector.connect(user=self.db_user, password=self.db_pw, database=self.db_name)
+        pass
+
+    def close_db(self):
+        self.db.close()
+        self.db = None
         pass
 
 
     def drop_table(self):
+        self.open_db()
         dbh = self.db.cursor()
         dbh.execute("drop table if exists %s" % self.table_name)
         dbh.close()
         self.db.commit()
+        self.close_db()
         pass
 
     def create_table(self):
+        self.open_db()
         dbh = self.db.cursor()
         sql = '''
 create table if not exists {table}
@@ -53,10 +66,12 @@ create table if not exists {table}
         dbh.execute(sql)
         dbh.close()
         self.db.commit()
+        self.close_db()
         pass
 
 
     def update_range(self, surrogateid, spawntype, pokemons, coord, distance):
+        self.open_db()
         dbh = self.db.cursor()
         reply = ""
 
@@ -76,38 +91,46 @@ create table if not exists {table}
             pass
         self.db.commit()
         dbh.close()
+        self.close_db()
         return reply
 
 
     def update_coord(self, surrogateid, coord):
+        self.open_db()
         dbh = self.db.cursor()
         sql = "update {table} set coord = GeomFromText('Point({coord.latitude} {coord.longitude})') where settingid = {surrogateid}".format(table=self.table_name, surrogateid=surrogateid, coord=coord)
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
+        self.close_db()
         return
 
 
     def update_distance(self, surrogateid, spawntype, distance):
+        self.open_db()
         dbh = self.db.cursor()
         fmt = "update {table} set distance = {d} where settingid = {surrogateid} and spawntype={spawntype}"
         sql = fmt.format(table=self.table_name, surrogateid=surrogateid, d=distance, spawntype=spawntype)
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
+        self.close_db()
         return
 
 
     def purge(self, surrogateid):
+        self.open_db()
         dbh = self.db.cursor()
         sql = "delete from {table} where settingid = {surrogateid}".format(table=self.table_name, surrogateid=surrogateid)
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
+        self.close_db()
         return
 
 
     def delete_spawns(self, surrogateid, spawntype, pokemons):
+        self.open_db()
         dbh = self.db.cursor()
         reply = ""
 
@@ -123,10 +146,12 @@ create table if not exists {table}
             pass
         self.db.commit()
         dbh.close()
+        self.close_db()
         return reply
 
 
     def set_user_selection(self, user):
+        self.open_db()
         dbh = self.db.cursor()
         sql = "delete from {me} where settingid = {u.surrogateid}".format(me=self.table_name, u=user)
         dbh.execute(sql)
@@ -138,10 +163,12 @@ create table if not exists {table}
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
+        self.close_db()
         pass
 
 
     def set_pokemno_distance(self, user, pokemon, distance, spawntype):
+        self.open_db()
         dbh = self.db.cursor()
         fmt = "insert into {table} (settingid, dexno, spawntype, coord, distance) value ({u.discordid}, {dexno}, {spawntype}, {coord}, {distance}) on duplicate key update coord={coord}"
         sql = fmt.format(u=user,
@@ -152,10 +179,12 @@ create table if not exists {table}
         dbh.execute(sql)
         self.db.commit()
         dbh.close()
+        self.close_db()
         pass
 
 
     def choose_listeners(self, pokemon, spawntype, center):
+        self.open_db()
         longest = geopy.distance.distance(kilometers=16)
         hexgon = "POLYGON((" + ",".join( [ "%g %g" % (point.latitude, point.longitude) for point in [ longest.destination(center, angle) for angle in range(0, 361, 60) ] ] ) + "))"
         dbh = self.db.cursor()
@@ -185,11 +214,14 @@ create table if not exists {table}
 
         dbh.close()
         self.db.commit()
+        self.close_db()
         return users
 
 
     # This is for testing only however
     def find_users_by_pokemon(self, pokemon, spawntype):
+        self.open_db()
+
         dbh = self.db.cursor()
         fmt="select t2.discordid, ST_AsText(t1.coord) from {me} as t1, {master} as t2 where t1.dexno = {dexno} and t1.settingid = t2.settingid and spawntype={spawntype}"
         sql = fmt.format(me=self.table_name,
@@ -216,11 +248,13 @@ create table if not exists {table}
 
         dbh.close()
         self.db.commit()
+        self.close_db()
         return users
 
 
     # This is for testing only however
-    def report_for_user(self, discordid):
+    def report_for_user(self, discordid, brief=False):
+        self.open_db()
         dbh = self.db.cursor()
         fmt = "select t3.name, t1.distance, ST_AsText(t1.coord), t1.spawntype, t2.on_off from {me} as t1, {master} as t2, pokemon as t3 where t1.dexno = t3.dexno and t1.settingid = t2.settingid and t2.discordid = '{discordid}' order by t1.spawntype, t3.dexno"
         sql = fmt.format(me=self.table_name,
@@ -256,13 +290,14 @@ create table if not exists {table}
             pass
         dbh.close()
         self.db.commit()
-        result = first_line
+        result = "" if brief else first_line + "\n"
         if len(spawns) > 0:
-            result = result + "\n Spawns: " + ", ".join(spawns)
+            result = result + " **Spawns**: " + ", ".join(spawns)
             pass
         if len(raids) > 0:
-            result = result + "\n Raids: " + ", ".join(raids)
+            result = result + " **Raids**: " + ", ".join(raids)
             pass
+        self.close_db()
         return result
 
     pass

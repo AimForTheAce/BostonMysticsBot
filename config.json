@@ -29,6 +29,9 @@
     "channel-map":  [ { "source":      { "server": "BostonPogoMap",  "channel" : "iv100" },
 			"destination": { "server": "Boston Mystics", "channel" : "100-percent-pokemon-sightings" },
 		        "format" : "100" },
+		      { "source":      { "server": "BostonPogoMap",  "channel" : "iv90" },
+			"destination": { "server": "Boston Mystics", "channel" : "rare-pokemon-sightings" },
+		        "format" : "95_20" },
 		      { "source":      { "server": "BostonPogoMap",  "channel" : "unown" },
 			"destination": { "server": "Boston Mystics", "channel" : "unown" },
 		        "format" : "spawn" },
@@ -40,7 +43,10 @@
 		        "format" : "rocketmap-raid", "pokemon": "" },
 		      { "source":      { "server": "middlesexpkmn",  "channel" : "burlingtonegg" },
 			"destination": { "server": "Boston Mystics", "channel" : "tier-5-raid" },
-		        "format" : "rocketmap-egg", "pokemon": "" }
+		        "format" : "rocketmap-egg", "pokemon": "" },
+		      { "source":      { "server": "Metrowest Scanner",  "channel" : "boston_iv100" },
+			"destination": { "server": "Boston Mystics", "channel" : "100-percent-pokemon-sightings" },
+		        "format" : "pokealarm-spawn" }
 		    ],
 
     "raid-channels": ["raid-level-4", "raid-legendary"],
@@ -49,5 +55,5 @@
 
     "ur-welcome": "You are welcome. FYI, I am a bot written by AimForTheAce.",
 
-    "tier-5-boss": "Suicune"
+    "tier-5-boss": "Groudon"
 }

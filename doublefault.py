@@ -22,8 +22,11 @@ firstline_re = re.compile(r"\*\*(\w+)\*\*\s*-\s*Level:\s*(\d+)")
 
 google_map_format = "https://maps.google.com/maps?q={lat},{lon}"
 
+headline_re = re.compile(r"(\[[^\]]+\]\s+){0,1}([\w\-]+)\s*\((\d+)%\)\s*-\s*\(CP:\s*(\d+)\)\s*-\s*\(Level:\s*(\d+)\)")
+
 debugging = False
 
+verify_msg = "Please verify your Mystic account.\n1. Open Your Pokemon Go app. \n2. Tap your avatar on left bottom of map view.\n3. Take a screen shot with your avatar with your level and buddy.\n4. Go back to the #post-avatar-screenshot-to-join channel.\n5. Tap + icon which is left of Message box of bottom.\n6. Choose the screenshot you just took.\n7. Someone from Boston Mystics will take a look and verify you.\n8. If your level is below 26, you need a vouching from someon already on the Boston Mystics, so find a good friend, or ask admin how to get in."
 
 def parse_spawn_message(spawn):
     coords = google_map_re.search(spawn, re.MULTILINE)
@@ -102,6 +105,55 @@ def to_distance(inp):
     return None
     
 
+def get_pokealarm_spawn(message):
+    output = None
+    if message.embeds:
+        for embed in message.embeds:
+            # 
+            url = embed['url']
+            latitude = "0.0000"
+            longitude = "0.0000"
+            m = self.googlemap_coords_re.search(url)
+            if m:
+                latitude = m.group(1)
+                longitude = m.group(2)
+                pass
+
+            # Magikarp CP:56 Lvl: 9 IV:100.0%
+            title = embed['title']
+
+            m = self.pokealarm_spawn_re.search(title)
+            pokemon = None
+            level = None
+            level = None
+            cp = None
+            
+            if m:
+                pokemon = m.group(1)
+                cp = m.group(2)
+                level = m.group(3)
+                iv = m.group(4)
+                pass
+
+            # Splash / Struggle 
+            # Sudbury Path, 02482 
+            # Despawns at 08:59:38 (28m 44s).
+            description = embed['description']
+            desclines = description.split('\n')
+            addr = desclines[1]
+            despawn = desclines[2].replace("Despawns at ")
+            
+            #
+            thumbnail = embed['thumbnail']
+
+            fmt = "{what} **Until**: {to}, **Address**: {addr} **Google Map:**: https://maps.google.com/maps?q={lat},{lon}"
+            output = fmt.format(what=pokemon, to=despawn, addr=addr,
+                                lat=latitude, lon=longitude)
+            return output
+        pass
+        
+    return output
+
 
 class DoubleFault(discord.Client):
     
@@ -109,8 +161,9 @@ class DoubleFault(discord.Client):
     gymhuntr_raid_clock_re = re.compile('Raid Ending: (\d+) hours (\d+) min (\d+) sec')
     gymhuntr_egg_clock_re = re.compile('Raid Starting: (\d+) hours (\d+) min (\d+) sec')
     raid_level_re = re.compile('Level (\d+) Raid')
-    gymhuntr_raid_coord_re = re.compile('https://GymHuntr\.com/#([+-]{0,1}\d+\.\d+),([+-]{0,1}\d+\.\d+)')
-
+    gymhuntr_coords_re = re.compile('\.com/#([+-]{0,1}\d+\.\d+),([+-]{0,1}\d+\.\d+)')
+    googlemap_coords_re = re.compile('\.com/maps\?q=([+-]{0,1}\d+\.\d+),([+-]{0,1}\d+\.\d+)')
+    pokealarm_spawn_re = re.compile("([\w-]+) CP:(\d+) Lvl:\s*(\d+) IV:(\d+\.\d+)%")
 
     def __init__(self):
         super().__init__()
@@ -176,7 +229,7 @@ class DoubleFault(discord.Client):
         await self.send_message(server, message)
 
         if member.server.name == "Boston Mystics":
-            await self.send_message(member, "**Reminder from Boston Mystics Discord: Please verify your Pokemon Go account. If you need help, ask us about how on the #post-avatar-screenshot-to-join channel of Boston Mystics Discord. Hope to see you around soon.**")
+            await self.send_message(member, verify_msg)
             pass
         pass
 
@@ -254,10 +307,27 @@ class DoubleFault(discord.Client):
                             pass
                         pass
                     elif format_spec == "100":
-                        output = " ".join( filter_lines(lines, ["Until", "L30+ IV", "L30+ CP", "Address", "Google"]) )
+                        output = " ".join( filter_lines(lines, ["Until", "Weather boosted", "L30+ IV", "L30+ CP", "Address", "Gender", "Google"]) )
+                        pass
+                    elif format_spec == "95_20":
+                        output = None
+                        mm = headline_re.search(lines[0])
+                        if mm:
+                            if ((int)(mm.group(3)) >= 95) and ((int)(mm.group(5)) >= 20):
+                                output = " ".join( filter_lines(lines, ["Until", "Weather boosted", "L30+ IV", "L30+ CP", "Address", "Gender", "Google"]) )
+                                pass
+                            pass
                         pass
                     elif format_spec == "spawn":
                         output = " ".join( filter_lines(lines, ["Until", "Address", "Google"]) )
+                        pass
+                    elif format_spec == "pokealarm-spawn":
+                        # near future expansion here
+                        output = get_pokealarm_spawn(message)
+                        pass
+                    elif format_spec == "rocketmap-spawn":
+                        # near future expansion here
+                        output = None
                         pass
                     elif format_spec == "rocketmap-raid":
                         # near future expansion here
@@ -472,6 +542,10 @@ class DoubleFault(discord.Client):
             elif words[1] == "iamgreeter":
                 self.greeters.append(message.author)
                 reply = "Greetings!\n"
+                pass
+
+            elif words[1] == "greetings":
+                reply = verify_msg
                 pass
 
             elif words[1] == "tellmegreeters":
@@ -778,7 +852,7 @@ Unit of distance is metric - meter. The minimum range is 100 and maximum range i
                     gymhuntr_url = embed['url']
                     latitude = "0.0000"
                     longitude = "0.0000"
-                    m = self.gymhuntr_raid_coord_re.search(gymhuntr_url)
+                    m = self.gymhuntr_coords_re.search(gymhuntr_url)
                     if m:
                         latitude = m.group(1)
                         longitude = m.group(2)
